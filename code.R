@@ -255,10 +255,10 @@ sim3 <- bind_rows(sim0_3,sim1_3,sim2_3,sim3_3,sim4_3) %>%
   rename(r = est.r, mboot= mean.H_boot.r., sdboot=sd.H_boot.r. )
 
 
-sim_res <- bind_rows(sim0,sim1,sim2,sim3) %>% arrange(n,k,P)
+sim <- bind_rows(sim0,sim1,sim2,sim3) %>% arrange(n,k,P)
 
 
-results <- sim_res %>% group_by(n,k,P) %>% summarize(mr=mean(r),
+results_sim <- sim_res %>% group_by(n,k,P) %>% summarize(mr=mean(r),
                                                      mb=mean(mboot),
                                                      sdr=sd(r), 
                                                      sdb=sqrt(mean(sdboot^2))
@@ -266,12 +266,59 @@ results <- sim_res %>% group_by(n,k,P) %>% summarize(mr=mean(r),
 
 library(ggplot2)
 
-
-ggplot(sim_res,aes(x=r,y=mboot)) + geom_point() + 
+ggplot(sim,aes(x=r,y=mboot)) + geom_point() + 
   geom_abline(intercept = 0, slope = 1) +  facet_grid(n + k ~ P)
 
-ggplot(results,aes(x=sdr,y=sdb)) + geom_point() + 
-  geom_abline(intercept = 0, slope = 1)
+ggplot(sim,aes(y=r)) + geom_boxplot() + 
+  facet_grid(n + k ~ P)
+
+
+results_20_5<-sim %>% filter(n==20, k==5)
+results_20_10<-sim %>% filter(n==20, k==10)
+results_100_5<-sim %>% filter(n==100, k==5)
+results_100_10<-sim %>% filter(n==100, k==10)
+
+labP <- function(x) paste("P =",x,sep=" ")
+
+
+ggplot(results_20_5,aes(y=r)) + geom_boxplot() + 
+  facet_grid(. ~ P, labeller = labeller(P=labP)) + geom_hline(yintercept=c(0,1)) +
+  ylab("ICC") + scale_x_discrete() + theme_bw()
+
+ggplot(results_20_10,aes(y=r)) + geom_boxplot() + 
+  facet_grid(. ~ P, labeller = labeller(P=labP)) + geom_hline(yintercept=c(0,1)) +
+  ylab("ICC") + scale_x_discrete() + theme_bw()
+
+ggplot(results_100_5,aes(y=r)) + geom_boxplot() + 
+  facet_grid(. ~ P, labeller = labeller(P=labP)) + geom_hline(yintercept=c(0,1)) +
+  ylab("ICC") + scale_x_discrete() + theme_bw()
+
+ggplot(results_100_10,aes(y=r)) + geom_boxplot() + 
+  facet_grid(. ~ P, labeller = labeller(P=labP)) + geom_hline(yintercept=c(0,1)) +
+  ylab("ICC") + scale_x_discrete() + theme_bw()
+
+
+
+# Standard error
+
+results_sim_20_5 <- results_sim %>% select(n,k,P,sdr,sdb) %>% 
+  filter(n==20,k==5)
+
+results_sim <- results_sim %>% mutate(k=factor(k),n=n, P=factor(P))
+
+ggplot(results_sim,aes(x=sdr,y=sdb, color = k, shape=P, size=factor(n))) + 
+  geom_point() + 
+  geom_abline(intercept = 0, slope = 1) + theme_bw() +
+  ylab("Bootstrap SE") + xlab("Estimates SE")
+
+library(knitr)
+library(kableExtra)
+
+
+results_sim %>% select(n,k,P,sdr,sdb) %>% 
+  kable(col.names=c("n","k","P","SD Estimates","Bootstrap SE"),
+        digits=c(0,0,0,4,4), format="latex") %>%
+  kable_classic_2(full_width = F)
 
 
 
