@@ -11,7 +11,9 @@ library(dplyr)
 library(sp)
 
 
-### Figure 1
+
+# Figure 1 ----------------------------------------------------------------
+
 
 # Subject 5107912
 tr11<-dades %>% filter((ID == 5107912) & (trip=="V01"))
@@ -31,16 +33,17 @@ aux<-data.frame(rbind(pp11,pp12,pp13),trip=c(rep("V01",length(pp11)),
 ))
 
 
-map <- get_googlemap(center = c(lon = 0.658, lat = 40.65), zoom=9, scale=1)
+map <- get_googlemap(center = c(lon = 0.658, lat = 40.65), zoom=9, scale=1,color="bw")
 pbanya<-ggmap(map, extent = 'device')
 
-p1<-pbanya + geom_path(mapping=aes(LONG,LAT,group=trip,colour=trip),linewidth=1.5,data=aux,
+
+p1<-pbanya + geom_path(mapping=aes(LONG,LAT,group=trip,colour=trip),linewidth=4,data=aux,
                        show.legend = FALSE) +
-  geom_point(data=sp_colony,mapping=aes(x=x,y=y),shape="*",col="red",cex=5)
+  geom_point(data=sp_colony,mapping=aes(x=x,y=y),shape="*",col="red",cex=20)
 
 p1 <- p1 +  geom_point(data=sp_colony,mapping=aes(x=x,y=y),shape="*",col="red",cex=5)+
-  ggtitle("Subject 1")
-
+  ggtitle("Subject 1")+ 
+  theme(plot.title = element_text(size = 40, face = "bold"))
 
 # Subject 5107913
 
@@ -59,10 +62,12 @@ aux<-data.frame(rbind(pp21,pp22,pp23),trip=c(rep("V01",length(pp21)),rep("V02",l
                                              rep("V03",length(pp23))))
 
 
-p2<-pbanya + geom_path(mapping=aes(LONG,LAT,group=trip,colour=trip),size=1.5,data=aux,
+p2<-pbanya + geom_path(mapping=aes(LONG,LAT,group=trip,colour=trip),linewidth=4,data=aux,
                        show.legend = FALSE) +
-  geom_point(data=sp_colony,mapping=aes(x=x,y=y),shape="*",col="red",cex=5)+
-  ggtitle("Subject 2")
+  geom_point(data=sp_colony,mapping=aes(x=x,y=y),shape="*",col="red",cex=20)+
+  ggtitle("Subject 2")+ 
+  theme(plot.title = element_text(size = 40, face = "bold"))
+
 
 
 
@@ -83,10 +88,12 @@ pp33 = SpatialPoints(tr33[c("LONG","LAT")], proj4string=CRS("+proj=longlat"))
 aux<-data.frame(rbind(pp31,pp32,pp33),trip=c(rep("V01",length(pp31)),rep("V02",length(pp32)),
                                              rep("V03",length(pp33))))
 
-p3<-pbanya + geom_path(mapping=aes(LONG,LAT,group=trip,colour=trip),size=1.5,data=aux,
+p3<-pbanya + geom_path(mapping=aes(LONG,LAT,group=trip,colour=trip),linewidth=4,data=aux,
                        show.legend = FALSE) +
-  geom_point(data=sp_colony,mapping=aes(x=x,y=y),shape="*",col="red",cex=5)+
-  ggtitle("Subject 3")
+  geom_point(data=sp_colony,mapping=aes(x=x,y=y),shape="*",col="red",cex=20)+
+  ggtitle("Subject 3")+ 
+  theme(plot.title = element_text(size = 40, face = "bold"))
+
 
 
 # Subject 5107917
@@ -103,10 +110,12 @@ pp43 = SpatialPoints(tr43[c("LONG","LAT")], proj4string=CRS("+proj=longlat"))
 aux<-data.frame(rbind(pp41,pp42,pp43),trip=c(rep("V01",length(pp41)),rep("V02",length(pp42)),
                                          rep("V03",length(pp43))))
 
-p4<-pbanya + geom_path(mapping=aes(LONG,LAT,group=trip,colour=trip),size=1.5,data=aux,
+p4<-pbanya + geom_path(mapping=aes(LONG,LAT,group=trip,colour=trip),linewidth=4,data=aux,
                        show.legend = FALSE) +
-  geom_point(data=sp_colony,mapping=aes(x=x,y=y),shape="*",col="red",cex=5)+
-  ggtitle("Subject 4")
+  geom_point(data=sp_colony,mapping=aes(x=x,y=y),shape="*",col="red",cex=20)+
+  ggtitle("Subject 4")+ 
+  theme(plot.title = element_text(size = 40, face = "bold"))
+
 
 
 g <- grid.arrange(p1, p2, p3, p4,nrow = 2)
@@ -115,16 +124,22 @@ ggsave("Figure1.pdf",g ,width=960, height=960 , units="mm", dpi=720)
 
 
 
-### Repeatability
+# Repeatability Example ---------------------------------------------------
+
 
 out<-iccTraj(dades,"ID","trip","LONG","LAT","triptime", distance="H",nBoot = 1000)
+
+
 
 # Summary medHD
 
 summary(out$D$d)
 
 
-# Figure 2
+
+# Figure 2 ----------------------------------------------------------------
+
+
 pden<-ggplot(data=out$D,aes(x=d))+geom_density(bw=10) + 
   theme_classic() +
   xlab("medHD") 
@@ -143,7 +158,44 @@ out$est
 interval(out)
 
 
-# Simulation study
+
+# Application to standard normal data -------------------------------------
+
+
+library(rptR)
+data(BeetlesBody)
+
+
+out<-rpt(BodyL ~ (1 | Population), grname = "Population", data = BeetlesBody, datatype = "Gaussian", 
+         nboot = 0, npermut = 0)
+
+out$R
+
+library(cccrm)
+
+est<-icc(BeetlesBody, ry="BodyL", rind="Population")
+est$icc
+
+# Estimate with ICC by distances
+# Number of data
+n<-nrow(BeetlesBody)
+# Number of subjects
+ns<-length(unique(BeetlesBody$Population))
+# Number of data by subject
+nt<-BeetlesBody %>% group_by(Population) %>% summarise(n=n())
+k<-mean(nt$n)
+
+# Euclidean distance among data with data ordered by subject
+X<-as.matrix(dist(BeetlesBody$BodyL))
+
+# Sample estimate
+est.r<-ICC(X,nt)
+est.r
+
+
+
+# Simulation Study --------------------------------------------------------
+
 
 library(adehabitatLT)
 library(doParallel)
@@ -255,10 +307,10 @@ sim3 <- bind_rows(sim0_3,sim1_3,sim2_3,sim3_3,sim4_3) %>%
   rename(r = est.r, mboot= mean.H_boot.r., sdboot=sd.H_boot.r. )
 
 
-sim <- bind_rows(sim0,sim1,sim2,sim3) %>% arrange(n,k,P)
+sim_res <- bind_rows(sim0,sim1,sim2,sim3) %>% arrange(n,k,P)
 
 
-results_sim <- sim_res %>% group_by(n,k,P) %>% summarize(mr=mean(r),
+results <- sim_res %>% group_by(n,k,P) %>% summarize(mr=mean(r),
                                                      mb=mean(mboot),
                                                      sdr=sd(r), 
                                                      sdb=sqrt(mean(sdboot^2))
@@ -266,60 +318,120 @@ results_sim <- sim_res %>% group_by(n,k,P) %>% summarize(mr=mean(r),
 
 library(ggplot2)
 
-ggplot(sim,aes(x=r,y=mboot)) + geom_point() + 
+
+ggplot(sim_res,aes(x=r,y=mboot)) + geom_point() + 
   geom_abline(intercept = 0, slope = 1) +  facet_grid(n + k ~ P)
 
-ggplot(sim,aes(y=r)) + geom_boxplot() + 
-  facet_grid(n + k ~ P)
-
-
-results_20_5<-sim %>% filter(n==20, k==5)
-results_20_10<-sim %>% filter(n==20, k==10)
-results_100_5<-sim %>% filter(n==100, k==5)
-results_100_10<-sim %>% filter(n==100, k==10)
-
-labP <- function(x) paste("P =",x,sep=" ")
-
-
-ggplot(results_20_5,aes(y=r)) + geom_boxplot() + 
-  facet_grid(. ~ P, labeller = labeller(P=labP)) + geom_hline(yintercept=c(0,1)) +
-  ylab("ICC") + scale_x_discrete() + theme_bw()
-
-ggplot(results_20_10,aes(y=r)) + geom_boxplot() + 
-  facet_grid(. ~ P, labeller = labeller(P=labP)) + geom_hline(yintercept=c(0,1)) +
-  ylab("ICC") + scale_x_discrete() + theme_bw()
-
-ggplot(results_100_5,aes(y=r)) + geom_boxplot() + 
-  facet_grid(. ~ P, labeller = labeller(P=labP)) + geom_hline(yintercept=c(0,1)) +
-  ylab("ICC") + scale_x_discrete() + theme_bw()
-
-ggplot(results_100_10,aes(y=r)) + geom_boxplot() + 
-  facet_grid(. ~ P, labeller = labeller(P=labP)) + geom_hline(yintercept=c(0,1)) +
-  ylab("ICC") + scale_x_discrete() + theme_bw()
+ggplot(results,aes(x=sdr,y=sdb)) + geom_point() + 
+  geom_abline(intercept = 0, slope = 1)
 
 
 
-# Standard error
+temp <- dades %>% group_by(ID,trip) %>%
+  filter(row_number() %% 2 == 1)
 
-results_sim_20_5 <- results_sim %>% select(n,k,P,sdr,sdb) %>% 
-  filter(n==20,k==5)
-
-results_sim <- results_sim %>% mutate(k=factor(k),n=n, P=factor(P))
-
-ggplot(results_sim,aes(x=sdr,y=sdb, color = k, shape=P, size=factor(n))) + 
-  geom_point() + 
-  geom_abline(intercept = 0, slope = 1) + theme_bw() +
-  ylab("Bootstrap SE") + xlab("Estimates SE")
-
-library(knitr)
-library(kableExtra)
+out_10<-iccTraj(temp,"ID","trip","LONG","LAT","triptime", distance="H",nBoot = 1000)
 
 
-results_sim %>% select(n,k,P,sdr,sdb) %>% 
-  kable(col.names=c("n","k","P","SD Estimates","Bootstrap SE"),
-        digits=c(0,0,0,4,4), format="latex") %>%
-  kable_classic_2(full_width = F)
+temp <- dades %>% group_by(ID,trip) %>%
+  filter(row_number() %% 4 == 1)
+
+out_20<-iccTraj(temp,"ID","trip","LONG","LAT","triptime", distance="H",nBoot = 1000)
+
+
+temp <- dades %>% group_by(ID,trip) %>%
+  filter(row_number() %% 6 == 1)
+
+out_30<-iccTraj(temp,"ID","trip","LONG","LAT","triptime", distance="H",nBoot = 1000)
 
 
 
+# ICC estimate
+out$est
+out_10$est
+out_20$est
+
+# Empirical bootstrap CI
+interval(out)
+diff(interval(out_10))
+diff(interval(out_20))
+
+
+
+
+# Example of Hausdorff's distance -----------------------------------------
+
+
+# Subject 5107912
+tr11<-dades %>% filter((ID == 5107912) & (trip=="V01"))
+tr12<-dades %>% filter((ID == 5107912) & (trip=="V02"))
+tr13<-dades %>% filter((ID == 5107912) & (trip=="V03"))
+
+
+pp11 = SpatialPoints(tr11[c("LONG","LAT")], proj4string=CRS("+proj=longlat"))
+pp12 = SpatialPoints(tr12[c("LONG","LAT")], proj4string=CRS("+proj=longlat"))
+pp13 = SpatialPoints(tr13[c("LONG","LAT")], proj4string=CRS("+proj=longlat"))
+
+sp_colony<-data.frame(y=40.575,x=0.658)
+
+aux<-data.frame(rbind(pp11,pp12,pp13),trip=c(rep("V01",length(pp11)),
+                                             rep("V02",length(pp12)),
+                                             rep("V03",length(pp13))
+))
+
+aux<-data.frame(rbind(pp11,pp12),trip=c(rep("V01",length(pp11)),
+                                             rep("V02",length(pp12))
+                                        )
+)
+
+
+
+map <- get_googlemap(center = c(lon = 0.658, lat = 40.65), zoom=11, scale=1,color="bw")
+pbanya<-ggmap(map, extent = 'device')
+
+
+p1<-pbanya + geom_path(mapping=aes(LONG,LAT,group=trip,colour=trip),linewidth=4,data=aux,
+                       show.legend = FALSE) 
+
+HD<-function(pp1,pp2,q=1){
+  ds<-spDists(pp1, pp2, longlat = TRUE)
+  m1<-quantile(apply(ds,1,min),q)
+  m2<-quantile(apply(ds,2,min),q)
+  max(m1,m2)
+}
+
+HD(pp11,pp12)
+ds<-spDists(pp11, pp12, longlat = TRUE)
+
+m1<-quantile(apply(ds,1,min),1)
+m2<-quantile(apply(ds,2,min),1)
+
+which(ds == m1, arr.ind = TRUE)
+
+sp_1<-data.frame(data.frame(pp11[30,]))
+sp_2<-data.frame(data.frame(pp12[6,]))
+sp_p1<-rbind(sp_1,sp_2)
+
+which(ds == m2, arr.ind = TRUE)
+sp_3<-data.frame(data.frame(pp11[6,]))
+sp_4<-data.frame(data.frame(pp12[11,]))
+sp_p2<-rbind(sp_3,sp_4)
+
+
+p1<-p1 + geom_point(data=sp_p1,mapping=aes(x=LONG,y=LAT),col="black",cex=20) + 
+  geom_point(data=sp_p2,mapping=aes(x=LONG,y=LAT),col="black",cex=20)+
+  geom_segment(data=sp_p1,aes(x=LONG[1], y=LAT[1], xend=LONG[2], yend=LAT[2]), 
+               arrow = arrow(length=unit(0.1,"inches")),linetype=5,cex=4) +
+  geom_segment(data=sp_p2,aes(x=LONG[2], y=LAT[2], xend=LONG[1], yend=LAT[1]), 
+               arrow = arrow(length=unit(0.1,"inches")),cex=4)
+
+
+p1
+ggsave("Figure_HD.pdf",p1 ,width=960, height=960 , units="mm", dpi=720)
+
+
+# Individual within-subjects  ---------------------------------------------
+
+indR <- out$indW %>% mutate(sb=out$est$sb, r=sb/(sb+w))
+indR
 
