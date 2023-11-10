@@ -15,6 +15,15 @@ library(sp)
 # Figure 1 ----------------------------------------------------------------
 
 
+
+map <- get_googlemap(center = c(lon = 0.65, lat = 40.46), zoom=10, scale=2,color="bw")
+pbanya<-ggmap(map, extent = 'device')
+
+map2 <- get_googlemap(center = c(lon = 0.6, lat = 40.4), zoom=10, scale=2,color="bw")
+pbanya2<-ggmap(map2, extent = 'device')
+
+
+
 # Subject 5107912
 tr11<-dades %>% filter((ID == 5107912) & (trip=="V01"))
 tr12<-dades %>% filter((ID == 5107912) & (trip=="V02"))
@@ -31,10 +40,6 @@ aux<-data.frame(rbind(pp11,pp12,pp13),trip=c(rep("V01",length(pp11)),
                                              rep("V02",length(pp12)),
                                              rep("V03",length(pp13))
 ))
-
-
-map <- get_googlemap(center = c(lon = 0.658, lat = 40.65), zoom=9, scale=1,color="bw")
-pbanya<-ggmap(map, extent = 'device')
 
 
 p1<-pbanya + geom_path(mapping=aes(LONG,LAT,group=trip,colour=trip),linewidth=4,data=aux,
@@ -88,7 +93,7 @@ pp33 = SpatialPoints(tr33[c("LONG","LAT")], proj4string=CRS("+proj=longlat"))
 aux<-data.frame(rbind(pp31,pp32,pp33),trip=c(rep("V01",length(pp31)),rep("V02",length(pp32)),
                                              rep("V03",length(pp33))))
 
-p3<-pbanya + geom_path(mapping=aes(LONG,LAT,group=trip,colour=trip),linewidth=4,data=aux,
+p3<-pbanya2 + geom_path(mapping=aes(LONG,LAT,group=trip,colour=trip),linewidth=4,data=aux,
                        show.legend = FALSE) +
   geom_point(data=sp_colony,mapping=aes(x=x,y=y),shape="*",col="red",cex=20)+
   ggtitle("Subject 3")+ 
@@ -120,6 +125,7 @@ p4<-pbanya + geom_path(mapping=aes(LONG,LAT,group=trip,colour=trip),linewidth=4,
 
 g <- grid.arrange(p1, p2, p3, p4,nrow = 2)
 
+g
 ggsave("Figure1.pdf",g ,width=960, height=960 , units="mm", dpi=720)
 
 
@@ -141,8 +147,7 @@ summary(out$D$d)
 
 
 pden<-ggplot(data=out$D,aes(x=d))+geom_density(bw=10) + 
-  theme_classic() +
-  xlab("medHD") 
+  theme_classic(base_size = 20) +  xlab("medHD (km)") 
 
 
 ggsave("Figure2.pdf",pden , units="mm", dpi=720)
@@ -158,6 +163,17 @@ out$est
 interval(out)
 
 
+# Using discrete Fréchet distance
+
+
+
+out_F<-iccTraj(dades,"ID","trip","LONG","LAT","triptime", distance="F",nBoot = 1000)
+
+# ICC estimate
+out_F$est
+
+# Empirical bootstrap CI
+interval(out_F)
 
 # Application to standard normal data -------------------------------------
 
@@ -209,6 +225,7 @@ library(doParallel)
 
 sim_icc<-function(n,k,p){
   
+  
   # Simulates base trips
   
   nc<-detectCores()
@@ -251,6 +268,58 @@ sim_icc<-function(n,k,p){
   return(data.frame(out$est$r,mean(out$boot$r),sd(out$boot$r)))
   
 }
+
+### Number of replicates different by subject
+
+sim_icc2<-function(n,k,p){
+  
+  # Number of trips by subject
+  nk<-round(runif(n,2,2*k-2),0)
+  
+  # Simulates base trips
+  
+  nc<-detectCores()
+  cl <- makeCluster(getOption("cl.cores", nc))
+  registerDoParallel(cl)
+  
+  
+  base_traj<-foreach(j=(1:n), .packages = "adehabitatLT")  %dopar%{
+    simm.crw(1:100, r = 0.6, burst = paste("ID",j,sep=""))
+  }
+  
+  
+  registerDoSEQ() 
+  
+  
+  # Simulates trips  
+  
+  nc<-detectCores()
+  cl <- makeCluster(getOption("cl.cores", nc))
+  registerDoParallel(cl)
+  
+  
+  trips_sim<-foreach(j=(1:n),.combine=rbind, .packages = "adehabitatLT") %:% 
+    foreach(i=(1:nk[j]), .combine=rbind, .packages=c("dplyr","adehabitatLT")) %dopar%{
+      if (i<nk[j]*p){
+        u <- simm.crw(1:100, r = 0.6, burst = paste("ID",j,sep=""))
+      }
+      else u<-base_traj[[j]]
+      u[[1]] %>% select(x,y,date) %>% mutate(trip=paste("V",i,sep=""),ID=j) %>%
+        rename(LAT=y, LONG=x, daytime = date)
+      
+    }
+  
+  
+  registerDoSEQ() 
+  
+  
+  out<-try(iccTraj(trips_sim,"ID","trip","LONG","LAT","daytime",distance="H"))
+  
+  if (sum(class(out)=="try-error")==0) out_ret<-data.frame(out$est$r,mean(out$boot$r),sd(out$boot$r))
+  if (sum(class(out)=="try-error")>0) out_ret<-data.frame(rep(NA,3))
+  return(out_ret)
+}
+
 
 
 library(purrr)
@@ -316,16 +385,73 @@ results <- sim_res %>% group_by(n,k,P) %>% summarize(mr=mean(r),
                                                      sdb=sqrt(mean(sdboot^2))
 )
 
-library(ggplot2)
 
 
-ggplot(sim_res,aes(x=r,y=mboot)) + geom_point() + 
-  geom_abline(intercept = 0, slope = 1) +  facet_grid(n + k ~ P)
+set.seed(2023)
+sim0_0b<-1:100 %>% map_df(function(i) sim_icc2(20,5,1))
+sim1_0b<-1:100 %>% map_df(function(i) sim_icc2(20,5,0.7))
+sim2_0b<-1:100 %>% map_df(function(i) sim_icc2(20,5,0.5))
+sim3_0b<-1:100 %>% map_df(function(i) sim_icc2(20,5,0.3))
+sim4_0b<-1:100 %>% map_df(function(i) sim_icc2(20,5,0))
 
-ggplot(results,aes(x=sdr,y=sdb)) + geom_point() + 
-  geom_abline(intercept = 0, slope = 1)
+
+set.seed(2023)
+sim0_1b<-1:100 %>% map_df(function(i) sim_icc2(20,10,1))
+sim1_1b<-1:100 %>% map_df(function(i) sim_icc2(20,10,0.7))
+sim2_1b<-1:100 %>% map_df(function(i) sim_icc2(20,10,0.5))
+sim3_1b<-1:100 %>% map_df(function(i) sim_icc2(20,10,0.3))
+sim4_1b<-1:100 %>% map_df(function(i) sim_icc2(20,10,0))
 
 
+
+set.seed(2023)
+sim0_2b<-1:100 %>% map_df(function(i) sim_icc2(100,10,1))
+sim1_2b<-1:100 %>% map_df(function(i) sim_icc2(100,10,0.7))
+sim2_2b<-1:100 %>% map_df(function(i) sim_icc2(100,10,0.5))
+sim3_2b<-1:100 %>% map_df(function(i) sim_icc2(100,10,0.3))
+sim4_2b<-1:100 %>% map_df(function(i) sim_icc2(100,10,0))
+
+set.seed(2023)
+sim0_3b<-1:100 %>% map_df(function(i) sim_icc2(100,5,1))
+sim1_3b<-1:100 %>% map_df(function(i) sim_icc2(100,5,0.7))
+sim2_3b<-1:100 %>% map_df(function(i) sim_icc2(100,5,0.5))
+sim3_3b<-1:100 %>% map_df(function(i) sim_icc2(100,5,0.3))
+sim4_3b<-1:100 %>% map_df(function(i) sim_icc2(100,5,0))
+
+
+
+sim0b <- bind_rows(sim0_0b,sim1_0b,sim2_0b,sim3_0b,sim4_0b) %>% 
+  mutate(n=20,k=5,P=c(rep(1,100),rep(0.7,100),rep(0.5,100),rep(0.3,100),rep(0,100))) %>%
+  rename(r = est.r, mboot= mean.H_boot.r., sdboot=sd.H_boot.r. )
+
+
+sim1b <- bind_rows(sim0_1b,sim1_1b,sim2_1b,sim3_1b,sim4_1b) %>% 
+  mutate(n=20,k=10,P=c(rep(1,100),rep(0.7,100),rep(0.5,100),rep(0.3,100),rep(0,100))) %>%
+  rename(r = est.r, mboot= mean.H_boot.r., sdboot=sd.H_boot.r. )
+
+sim2b <- bind_rows(sim0_2b,sim1_2b,sim2_2b,sim3_2b,sim4_2b) %>% 
+  mutate(n=100,k=10,P=c(rep(1,100),rep(0.7,100),rep(0.5,100),rep(0.3,100),rep(0,100))) %>%
+  rename(r = est.r, mboot= mean.H_boot.r., sdboot=sd.H_boot.r. )
+
+sim3b <- bind_rows(sim0_3b,sim1_3b,sim2_3b,sim3_3b,sim4_3b) %>% 
+  mutate(n=100,k=5,P=c(rep(1,100),rep(0.7,100),rep(0.5,100),rep(0.3,100),rep(0,100))) %>%
+  rename(r = est.r, mboot= mean.H_boot.r., sdboot=sd.H_boot.r. )
+
+
+sim_resb <- bind_rows(sim0b,sim1b,sim2b,sim3b) %>% arrange(n,k,P)
+
+
+resultsb <- sim_resb %>% group_by(n,k,P) %>% summarize(mr=mean(r),
+                                                       mb=mean(mboot),
+                                                       sdr=sd(r), 
+                                                       sdb=sqrt(mean(sdboot^2))
+)
+
+
+
+
+
+###### Removing intermediate data
 
 temp <- dades %>% group_by(ID,trip) %>%
   filter(row_number() %% 2 == 1)
@@ -355,7 +481,6 @@ out_20$est
 interval(out)
 diff(interval(out_10))
 diff(interval(out_20))
-
 
 
 
